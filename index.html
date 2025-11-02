@@ -2,8 +2,9 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>BabylonJS Gaussian Splat Viewer</title>
+    <title>John Eddy 3D Viz</title>
     <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
     <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
   </head>
   <body style="margin:0;overflow:hidden">
@@ -14,7 +15,6 @@
       const engine = new BABYLON.Engine(canvas, true);
 
       const createScene = async function () {
-        // Scene setup
         const scene = new BABYLON.Scene(engine);
         scene.clearColor = new BABYLON.Color3(0.1, 0.1, 0.1);
 
@@ -31,30 +31,46 @@
         camera.inertia = 0.97;
         camera.attachControl(canvas, true);
 
-        // Gaussian splatting setup
-        let gs;
+        // Light
+        const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(1, 1, 0), scene);
+        light.intensity = 1.1;
+
+        // GLB loading setup
+        let currentModel;
         let index = 0;
 
-        const loadGS = async function () {
-          if (gs) gs.dispose();
-          gs = new BABYLON.GaussianSplattingMesh("gs", null, scene);
+        const scenes = [
+          "https://models.babylonjs.com/CornellBox/cornellBox.glb",
+          "https://github.com/johneddyconsultant/3d-visualizer/blob/main/mini-pyramid.glb?raw=true",
+          "https://models.babylonjs.com/DamagedHelmet/glTF-Binary/DamagedHelmet.glb",
+          "https://models.babylonjs.com/FlightHelmet/glTF/FlightHelmet.glb"
+        ];
 
-          // Replace or edit these URLs if you want custom files (Google Drive etc.)
-          const scenes = [
-            "https://assets.babylonjs.com/splats/gs_Sqwakers_trimed.splat",
-            "https://github.com/johneddyconsultant/3d-visualizer/blob/main/mini-pyramid.glb",
-          ];
-          const cameraRadii = [5, 5, 7, 9];
-          const cameraAlphas = [-0.8, 2.9, -0.9, 0.8];
+        const cameraRadii = [5, 5, 7, 9];
+        const cameraAlphas = [-0.8, 2.9, -0.9, 0.8];
 
-          await gs.loadFileAsync(scenes[index]);
+        const loadGLB = async function () {
+          if (currentModel) currentModel.dispose();
+
+          engine.displayLoadingUI();
+
+          const result = await BABYLON.SceneLoader.ImportMeshAsync(
+            "",
+            "",
+            scenes[index],
+            scene
+          );
+          currentModel = result.meshes[0];
+
           camera.radius = cameraRadii[index];
           camera.alpha = cameraAlphas[index];
+
+          engine.hideLoadingUI();
         };
 
-        await loadGS();
+        await loadGLB();
 
-        // GUI
+        // GUI setup
         const guiLayer = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("guiLayer");
         const guiContainer = new BABYLON.GUI.Grid();
         guiContainer.name = "uiGrid";
@@ -77,9 +93,8 @@
         leftBtn.thickness = 0;
         leftBtn.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
         leftBtn.onPointerClickObservable.add(() => {
-          index += 3;
-          index %= 4;
-          loadGS();
+          index = (index + 3) % scenes.length;
+          loadGLB();
         });
 
         const rightBtn = BABYLON.GUI.Button.CreateImageOnlyButton(
@@ -91,31 +106,22 @@
         rightBtn.thickness = 0;
         rightBtn.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_RIGHT;
         rightBtn.onPointerClickObservable.add(() => {
-          index++;
-          index %= 4;
-          loadGS();
+          index = (index + 1) % scenes.length;
+          loadGLB();
         });
 
         guiContainer.addControl(leftBtn, 0, 0);
         guiContainer.addControl(rightBtn, 0, 2);
 
-        // Loading UI
-        engine.displayLoadingUI();
-        scene.executeWhenReady(function () {
-          engine.hideLoadingUI();
-        });
-
         scene.onBeforeRenderObservable.add(() => {
           camera.beta = Math.min(camera.beta, 1.45);
-          camera.radius = Math.max(camera.radius, 3);
-          camera.radius = Math.min(camera.radius, 6);
+          camera.radius = BABYLON.Scalar.Clamp(camera.radius, 3, 8);
         });
 
         return scene;
       };
 
-      // Create scene and start render loop
-      createScene().then(scene => {
+      createScene().then((scene) => {
         engine.runRenderLoop(() => scene.render());
       });
 
